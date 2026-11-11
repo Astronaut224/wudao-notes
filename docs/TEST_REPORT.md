@@ -15,7 +15,8 @@
 
 ## 实机端到端验证（Windows 11，125% DPI，release exe）
 
-> 通过截图 + 模拟点击/键盘逐项验证，截图存档于 `C:\Users\WYH\Downloads\wudao-setup\`。
+> 通过截图 + 模拟点击/键盘逐项验证；验证截图已清理，验证工具（截图/点击/造数脚本）保留于
+> `C:\Users\WYH\Downloads\wudao-setup\` 供回归使用。
 
 ### 场景 A：开工前排序
 - [x] 空数据启动不闪退，界面仅有「待办/笔记」两个业务入口
