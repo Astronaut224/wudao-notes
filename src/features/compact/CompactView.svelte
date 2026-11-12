@@ -7,9 +7,9 @@
   import FeatherIcon from "../../components/FeatherIcon.svelte";
   import { api } from "../../lib/api";
   import { appState } from "../../stores/app.svelte";
-  import { loadTodos, moveTodo, setTodoDone, todoStore } from "../../stores/todos.svelte";
+  import { loadTodos, moveTodo, selectTodo, setTodoDone, todoStore } from "../../stores/todos.svelte";
   import { createNote } from "../../stores/notes.svelte";
-  import { toast } from "../../stores/toast.svelte";
+  import { toast, toastError } from "../../stores/toast.svelte";
   import type { TodoSummary } from "../../lib/types";
 
   let quickText = $state("");
@@ -69,34 +69,55 @@
     void api.setAlwaysOnTop(onTop).catch(() => (onTop = !onTop));
   }
 
-  // ---------- 拖拽排序 ----------
+  // ---------- 拖拽排序（指针事件驱动）+ 点击跳详情 ----------
   let dragId = $state<string | null>(null);
   let dropHint = $state<{ id: string; where: "above" | "below" } | null>(null);
+  let dragMoved = $state(false);
+  let suppressClick = false;
+  let dragStart = { x: 0, y: 0 };
 
-  function onDragStart(e: DragEvent, t: TodoSummary) {
+  function rowAtPoint(x: number, y: number): HTMLElement | null {
+    const el = document.elementFromPoint(x, y);
+    return el ? (el.closest("[data-row-id]") as HTMLElement | null) : null;
+  }
+
+  function onRowPointerDown(e: PointerEvent, t: TodoSummary) {
+    if (e.button !== 0) return;
     dragId = t.id;
-    e.dataTransfer?.setData("text/plain", t.id);
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-  }
-  function onDragOver(e: DragEvent, t: TodoSummary) {
-    if (!dragId || dragId === t.id) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    dropHint = { id: t.id, where: e.clientY < rect.top + rect.height / 2 ? "above" : "below" };
-  }
-  function onDragLeave() {
-    dropHint = null;
-  }
-  function onDrop(e: DragEvent, t: TodoSummary) {
-    e.preventDefault();
-    const id = dragId ?? e.dataTransfer?.getData("text/plain") ?? null;
-    dragId = null;
-    const hint = dropHint;
-    dropHint = null;
-    if (!id || id === t.id || !hint) return;
-    const beforeId = hint.where === "above" ? t.id : nextSiblingOf(t);
-    void moveTodo(id, t.priority, beforeId);
+    dragMoved = false;
+    dragStart = { x: e.clientX, y: e.clientY };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+
+    const move = (ev: PointerEvent) => {
+      if (!dragMoved && Math.hypot(ev.clientX - dragStart.x, ev.clientY - dragStart.y) < 5) return;
+      dragMoved = true;
+      const el = rowAtPoint(ev.clientX, ev.clientY);
+      if (!el || el.dataset.rowId === dragId) {
+        dropHint = null;
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      dropHint = {
+        id: el.dataset.rowId!,
+        where: ev.clientY < rect.top + rect.height / 2 ? "above" : "below",
+      };
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const hint = dropHint;
+      const id = dragId;
+      dropHint = null;
+      dragId = null;
+      if (!dragMoved || !hint || !id) return;
+      suppressClick = true;
+      const target = todoStore.items.find((x) => x.id === hint.id);
+      if (!target) return;
+      const beforeId = hint.where === "above" ? target.id : nextSiblingOf(target);
+      void moveTodo(id, target.priority, beforeId);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   }
   function nextSiblingOf(t: TodoSummary): string | null {
     const same = todoStore.items
@@ -105,9 +126,16 @@
     const idx = same.findIndex((x) => x.id === t.id);
     return idx >= 0 && idx + 1 < same.length ? same[idx + 1].id : null;
   }
-  function onDragEnd() {
-    dragId = null;
-    dropHint = null;
+
+  /** 单击待办：选中并切回完整窗口查看详情 */
+  async function openDetailInFull(id: string) {
+    appState.tab = "todo";
+    await selectTodo(id);
+    try {
+      await api.setWindowMode("normal");
+    } catch (e) {
+      toastError(e, "打开完整窗口失败");
+    }
   }
 </script>
 
@@ -139,12 +167,19 @@
             class:dragging={dragId === t.id}
             class:drop-above={dropHint?.id === t.id && dropHint.where === "above"}
             class:drop-below={dropHint?.id === t.id && dropHint.where === "below"}
-            draggable="true"
-            ondragstart={(e) => onDragStart(e, t)}
-            ondragover={(e) => onDragOver(e, t)}
-            ondragleave={onDragLeave}
-            ondrop={(e) => onDrop(e, t)}
-            ondragend={onDragEnd}
+            role="button"
+            tabindex="0"
+            title="点击在完整窗口中查看详情，按住拖动排序"
+            data-row-id={t.id}
+            onpointerdown={(e) => onRowPointerDown(e, t)}
+            onclick={() => {
+              if (suppressClick) {
+                suppressClick = false;
+                return;
+              }
+              void openDetailInFull(t.id);
+            }}
+            onkeydown={(e) => e.key === "Enter" && void openDetailInFull(t.id)}
           >
             <button class="tick" title="标记完成" aria-label="标记完成" onclick={() => void setTodoDone(t.id, true)}></button>
             <span class="flex1" title={t.next_action || t.title}>{t.title}</span>
@@ -268,7 +303,7 @@
     border-bottom: 1px solid #f1f3f7;
     font-size: 12px;
     color: #4a576a;
-    cursor: grab;
+    cursor: default;
     border-radius: 6px;
   }
   .compact-row.dragging {

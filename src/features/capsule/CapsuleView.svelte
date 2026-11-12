@@ -26,6 +26,8 @@
   let dragArmed = false;
   let dragMoved = false;
   let redockTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastClickAt = 0;
+  let singleClickTimer: ReturnType<typeof setTimeout> | null = null;
 
   const activeCount = $derived(todoStore.items.filter((t) => t.status === "active").length);
   const docked = $derived(appState.capsuleDocked !== "");
@@ -34,6 +36,7 @@
     void loadTodos();
     return () => {
       if (redockTimer) clearTimeout(redockTimer);
+      if (singleClickTimer) clearTimeout(singleClickTimer);
     };
   });
 
@@ -144,10 +147,31 @@
     const wasDrag = dragMoved;
     dragging = false;
     if (!wasDrag) {
-      // 单击（无拖动）：打开简洁窗
+      // 单击（无拖动）：打开简洁窗；双击：直达完整窗口
       anchoredSide = "";
-      void openCompact();
+      const now = Date.now();
+      if (now - lastClickAt < 350) {
+        lastClickAt = 0;
+        if (singleClickTimer) {
+          clearTimeout(singleClickTimer);
+          singleClickTimer = null;
+        }
+        void openFull();
+      } else {
+        lastClickAt = now;
+        if (singleClickTimer) clearTimeout(singleClickTimer);
+        singleClickTimer = setTimeout(() => {
+          singleClickTimer = null;
+          void openCompact();
+        }, 280);
+      }
       return;
+    }
+    // 拖动结束：清除单击判定状态
+    lastClickAt = 0;
+    if (singleClickTimer) {
+      clearTimeout(singleClickTimer);
+      singleClickTimer = null;
     }
     // 拖动结束：贴近所在屏幕的左/右缘 → 吸附收起
     try {
@@ -160,6 +184,14 @@
       }
     } catch {
       /* 吸附判定失败保持当前位置 */
+    }
+  }
+
+  async function openFull() {
+    try {
+      await api.setWindowMode("normal");
+    } catch (e) {
+      toastError(e, "打开完整窗口失败");
     }
   }
 
@@ -188,7 +220,7 @@
       onmousedown={onBodyMouseDown}
       role="button"
       tabindex="0"
-      title="点击打开简洁窗；按住拖动，拖到屏幕边缘自动收起"
+      title="单击打开简洁窗，双击打开完整窗口；按住拖动，拖到屏幕边缘自动收起"
       onkeydown={(e) => e.key === "Enter" && void openCompact()}
     >
       <span class="pill-icon"><FeatherIcon size={18} color="#fff" /></span>

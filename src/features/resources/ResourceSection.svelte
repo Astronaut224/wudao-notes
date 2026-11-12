@@ -1,5 +1,7 @@
 <script lang="ts">
   /** 资料区：文件/图片（默认复制）/链接 的展示与操作，待办详情与笔记编辑器共用 */
+  import { onMount } from "svelte";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
   import ConfirmDialog from "../../components/ConfirmDialog.svelte";
   import { api, resourceImageUrl } from "../../lib/api";
   import type { Resource } from "../../lib/types";
@@ -60,15 +62,39 @@
     await reload();
   }
 
-  async function onDropFiles(e: DragEvent) {
-    e.preventDefault();
-    draggingFile = false;
-    // Tauri 拖放的系统文件经 dataTransfer.files 提供
-    const files = e.dataTransfer?.files;
-    if (!files || !files.length) return;
-    toast("拖拽的文件将复制到应用内保存");
-    // WebView 不提供完整路径，改用 webview 拖放事件路径
-  }
+  // Tauri 原生拖放：系统文件拖入窗口 → 复制/引用到当前详情
+  // 资料区可见时，拖放的文件都归属当前选中的待办/笔记
+  onMount(() => {
+    const un = getCurrentWebview().onDragDropEvent(async (event) => {
+      const payload = event.payload;
+      if (payload.type === "enter" || payload.type === "over") {
+        draggingFile = true;
+        return;
+      }
+      draggingFile = false;
+      if (payload.type !== "drop" || !ownerId) return;
+      const paths = (payload.paths ?? []).filter(Boolean);
+      if (!paths.length) return;
+      let ok = 0;
+      for (const p of paths) {
+        try {
+          await api.attachLocalFile(ownerType, ownerId, p, referenceMode ? "reference" : "copy");
+          ok += 1;
+        } catch (e) {
+          toastError(e, "添加资料失败");
+        }
+      }
+      if (ok > 0) {
+        toast(
+          referenceMode
+            ? "已按“仅引用”记录原位置：原文件移动或删除后此处会提示失效"
+            : `已添加 ${ok} 个文件（复制到应用内保存）`,
+        );
+        await reload();
+      }
+    });
+    return () => un();
+  });
 
   async function openRes(r: Resource) {
     if (r.kind === "image" && r.file_mode === "copy" && r.exists) {
@@ -142,16 +168,7 @@
   }
 </script>
 
-<div
-  class="res-section"
-  class:dragging={draggingFile}
-  ondragover={(e) => {
-    e.preventDefault();
-    draggingFile = true;
-  }}
-  ondragleave={() => (draggingFile = false)}
-  ondrop={(e) => void onDropFiles(e)}
->
+<div class="res-section" class:dragging={draggingFile}>
   <div class="section-head">
     <span class="section-title">相关资料 <span class="count">{resources.length}</span></span>
     <span class="res-actions">

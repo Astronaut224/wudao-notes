@@ -46,37 +46,55 @@
 
   const activeCount = $derived(todoStore.items.filter((t) => t.status === "active").length);
 
-  // ---------- 拖拽排序 ----------
+  // ---------- 拖拽排序（指针事件驱动，不依赖 HTML5 dnd）----------
   let dragId = $state<string | null>(null);
   let dropHint = $state<{ id: string; where: "above" | "below" } | null>(null);
+  let dragMoved = $state(false);
+  let suppressClick = false;
+  let dragStart = { x: 0, y: 0 };
 
-  function onDragStart(e: DragEvent, t: TodoSummary) {
+  function rowAtPoint(x: number, y: number): HTMLElement | null {
+    const el = document.elementFromPoint(x, y);
+    return el ? (el.closest("[data-row-id]") as HTMLElement | null) : null;
+  }
+
+  function onRowPointerDown(e: PointerEvent, t: TodoSummary) {
+    if (e.button !== 0 || t.status !== "active") return;
     dragId = t.id;
-    e.dataTransfer?.setData("text/plain", t.id);
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-  }
-  function onDragOver(e: DragEvent, t: TodoSummary) {
-    if (!dragId || dragId === t.id) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const above = e.clientY < rect.top + rect.height / 2;
-    dropHint = { id: t.id, where: above ? "above" : "below" };
-  }
-  function onDragLeave() {
-    dropHint = null;
-  }
-  function onDrop(e: DragEvent, t: TodoSummary) {
-    e.preventDefault();
-    const id = dragId ?? e.dataTransfer?.getData("text/plain") ?? null;
-    dragId = null;
-    const hint = dropHint;
-    dropHint = null;
-    if (!id || id === t.id || !hint) return;
-    // 目标组 = 目标条目的优先级；above 插到目标前，below 插到目标后
-    const beforeId =
-      hint.where === "above" ? t.id : nextSiblingInGroup(t) ?? null;
-    void moveTodo(id, t.priority, beforeId);
+    dragMoved = false;
+    dragStart = { x: e.clientX, y: e.clientY };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+
+    const move = (ev: PointerEvent) => {
+      if (!dragMoved && Math.hypot(ev.clientX - dragStart.x, ev.clientY - dragStart.y) < 5) return;
+      dragMoved = true;
+      const el = rowAtPoint(ev.clientX, ev.clientY);
+      if (!el || el.dataset.rowId === dragId) {
+        dropHint = null;
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      dropHint = {
+        id: el.dataset.rowId!,
+        where: ev.clientY < rect.top + rect.height / 2 ? "above" : "below",
+      };
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const hint = dropHint;
+      const id = dragId;
+      dropHint = null;
+      dragId = null;
+      if (!dragMoved || !hint || !id) return;
+      suppressClick = true;
+      const target = todoStore.items.find((x) => x.id === hint.id);
+      if (!target) return;
+      const beforeId = hint.where === "above" ? target.id : nextSiblingInGroup(target);
+      void moveTodo(id, target.priority, beforeId);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   }
   function nextSiblingInGroup(t: TodoSummary): string | null {
     const same = todoStore.items
@@ -84,10 +102,6 @@
       .sort((a, b) => a.sort_order - b.sort_order);
     const idx = same.findIndex((x) => x.id === t.id);
     return idx >= 0 && idx + 1 < same.length ? same[idx + 1].id : null;
-  }
-  function onDragEnd() {
-    dragId = null;
-    dropHint = null;
   }
 
   // ---------- 右键菜单 ----------
@@ -187,13 +201,15 @@
           class:done-row={t.status === "done"}
           role="button"
           tabindex="0"
-          draggable={t.status === "active"}
-          ondragstart={(e) => onDragStart(e, t)}
-          ondragover={(e) => onDragOver(e, t)}
-          ondragleave={onDragLeave}
-          ondrop={(e) => onDrop(e, t)}
-          ondragend={onDragEnd}
-          onclick={() => void selectTodo(t.id)}
+          data-row-id={t.id}
+          onpointerdown={(e) => onRowPointerDown(e, t)}
+          onclick={() => {
+            if (suppressClick) {
+              suppressClick = false;
+              return;
+            }
+            void selectTodo(t.id);
+          }}
           onkeydown={(e) => e.key === "Enter" && void selectTodo(t.id)}
           oncontextmenu={(e) => {
             e.preventDefault();
