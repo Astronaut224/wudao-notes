@@ -131,8 +131,26 @@ export const api = {
   windowMaximized(): Promise<boolean> {
     return invoke("window_maximized");
   },
-  setCompactMode(enabled: boolean): Promise<void> {
-    return invoke("set_compact_mode", { enabled });
+  setWindowMode(mode: "normal" | "compact" | "capsule"): Promise<void> {
+    return invoke("set_window_mode", { mode });
+  },
+  getWindowMode(): Promise<{ mode: string; capsuleDocked: string }> {
+    return invoke("get_window_mode");
+  },
+  setCapsuleDocked(docked: boolean, side: string, onlyIfOutside = false): Promise<void> {
+    return invoke("set_capsule_docked", { docked, side: side || null, onlyIfOutside });
+  },
+  moveWindowTo(x: number, y: number): Promise<void> {
+    return invoke("move_window_to", { x, y });
+  },
+  getWindowPosition(): Promise<[number, number]> {
+    return invoke("get_window_position");
+  },
+  getWindowRect(): Promise<[number, number, number, number]> {
+    return invoke("get_window_rect");
+  },
+  getScreenSize(): Promise<[number, number, number, number]> {
+    return invoke("get_screen_size");
   },
   setAlwaysOnTop(enabled: boolean): Promise<void> {
     return invoke("set_always_on_top", { enabled });

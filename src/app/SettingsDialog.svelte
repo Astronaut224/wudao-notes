@@ -155,8 +155,8 @@
 
       <div class="set-row">
         <div class="set-info">
-          <div class="set-name">迷你窗置顶</div>
-          <div class="set-desc">迷你悬浮窗默认保持在其他窗口上方</div>
+          <div class="set-name">简洁窗置顶</div>
+          <div class="set-desc">简洁模式与胶囊悬浮默认保持在其他窗口上方</div>
         </div>
         <div class="set-ctrl">
           <button class="btn-secondary" onclick={() => void toggleCompactTop()}>

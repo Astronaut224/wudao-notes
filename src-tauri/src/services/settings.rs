@@ -7,6 +7,8 @@ pub const ALLOWED_KEYS: &[&str] = &[
     "window_mode",
     "normal_geometry",
     "compact_geometry",
+    "capsule_geometry",
+    "capsule_docked",
     "compact_on_top",
     "global_shortcut",
     "launch_at_login",

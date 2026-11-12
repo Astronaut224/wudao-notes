@@ -11,6 +11,8 @@
   import NoteListPanel from "../features/notes/NoteListPanel.svelte";
   import NoteEditorPanel from "../features/notes/NoteEditorPanel.svelte";
   import CompactView from "../features/compact/CompactView.svelte";
+  import CapsuleView from "../features/capsule/CapsuleView.svelte";
+  import { api } from "../lib/api";
   import { appState } from "../stores/app.svelte";
   import { loadTodos } from "../stores/todos.svelte";
   import { createNote, loadNotes } from "../stores/notes.svelte";
@@ -22,12 +24,28 @@
     void loadTodos();
     void loadNotes();
 
+    // 同步启动时的窗口形态（如上一次退出前是简洁/胶囊）
+    void api
+      .getWindowMode()
+      .then((m) => {
+        if (m.mode === "compact" || m.mode === "capsule") {
+          appState.mode = m.mode;
+          appState.capsuleDocked = m.capsuleDocked ?? "";
+        }
+      })
+      .catch(() => {});
+
     const reg = <T,>(event: string, handler: (payload: T) => void) => {
       listen<T>(event, (e) => handler(e.payload)).then((u) => unlisteners.push(u));
     };
 
-    reg<{ compact: boolean }>("mode-changed", (p) => {
-      appState.mode = p.compact ? "compact" : "normal";
+    reg<{ mode: string; compact: boolean }>("mode-changed", (p) => {
+      if (p.mode === "normal" || p.mode === "compact" || p.mode === "capsule") {
+        appState.mode = p.mode;
+      }
+    });
+    reg<{ docked: boolean; side: string }>("capsule-state", (p) => {
+      appState.capsuleDocked = p.docked ? (p.side === "left" ? "left" : "right") : "";
     });
     reg("create-todo", () => {
       appState.tab = "todo";
@@ -70,7 +88,9 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-{#if appState.mode === "compact"}
+{#if appState.mode === "capsule"}
+  <CapsuleView />
+{:else if appState.mode === "compact"}
   <CompactView />
 {:else}
   <div class="app-shell">

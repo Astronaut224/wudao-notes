@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FeatherIcon from "../components/FeatherIcon.svelte";
   import { appState } from "../stores/app.svelte";
 
   function switchTab(tab: "todo" | "notes") {
@@ -7,7 +8,9 @@
 </script>
 
 <aside class="sidebar">
-  <div class="sidebar-title"><span class="small-logo">道</span>吾道笔记</div>
+  <div class="sidebar-title">
+    <span class="small-logo"><FeatherIcon size={14} color="#fff" /></span>吾道笔记
+  </div>
   <button
     class="nav-item"
     class:active={appState.tab === "todo"}

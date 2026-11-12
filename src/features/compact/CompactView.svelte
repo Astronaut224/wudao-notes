@@ -1,11 +1,16 @@
 <script lang="ts">
-  /** 迷你悬浮模式：同一窗口切换形态，仅浏览置顶待办、勾选完成、快速新增待办/笔记 */
+  /**
+   * 简洁模式（340×440 浮动小窗）：浏览/勾选/拖拽排序待办、快速新增待办/笔记、
+   * 切换胶囊悬浮、展开完整窗口
+   */
   import { onMount } from "svelte";
+  import FeatherIcon from "../../components/FeatherIcon.svelte";
   import { api } from "../../lib/api";
   import { appState } from "../../stores/app.svelte";
-  import { loadTodos, setTodoDone, todoStore } from "../../stores/todos.svelte";
+  import { loadTodos, moveTodo, setTodoDone, todoStore } from "../../stores/todos.svelte";
   import { createNote } from "../../stores/notes.svelte";
   import { toast } from "../../stores/toast.svelte";
+  import type { TodoSummary } from "../../lib/types";
 
   let quickText = $state("");
   let quickMode = $state<"todo" | "note">("todo");
@@ -15,7 +20,7 @@
     todoStore.items
       .filter((t) => t.status === "active")
       .sort((a, b) => a.priority - b.priority || a.sort_order - b.sort_order)
-      .slice(0, 8),
+      .slice(0, 10),
   );
   const activeCount = $derived(todoStore.items.filter((t) => t.status === "active").length);
 
@@ -51,8 +56,11 @@
     }
   }
 
-  function expand() {
-    void api.setCompactMode(false);
+  function expandFull() {
+    void api.setWindowMode("normal");
+  }
+  function toCapsule() {
+    void api.setWindowMode("capsule");
   }
 
   function toggleTop() {
@@ -60,88 +68,165 @@
     appState.compactOnTop = onTop;
     void api.setAlwaysOnTop(onTop).catch(() => (onTop = !onTop));
   }
+
+  // ---------- 拖拽排序 ----------
+  let dragId = $state<string | null>(null);
+  let dropHint = $state<{ id: string; where: "above" | "below" } | null>(null);
+
+  function onDragStart(e: DragEvent, t: TodoSummary) {
+    dragId = t.id;
+    e.dataTransfer?.setData("text/plain", t.id);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  }
+  function onDragOver(e: DragEvent, t: TodoSummary) {
+    if (!dragId || dragId === t.id) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    dropHint = { id: t.id, where: e.clientY < rect.top + rect.height / 2 ? "above" : "below" };
+  }
+  function onDragLeave() {
+    dropHint = null;
+  }
+  function onDrop(e: DragEvent, t: TodoSummary) {
+    e.preventDefault();
+    const id = dragId ?? e.dataTransfer?.getData("text/plain") ?? null;
+    dragId = null;
+    const hint = dropHint;
+    dropHint = null;
+    if (!id || id === t.id || !hint) return;
+    const beforeId = hint.where === "above" ? t.id : nextSiblingOf(t);
+    void moveTodo(id, t.priority, beforeId);
+  }
+  function nextSiblingOf(t: TodoSummary): string | null {
+    const same = todoStore.items
+      .filter((x) => x.status === "active" && x.priority === t.priority)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    const idx = same.findIndex((x) => x.id === t.id);
+    return idx >= 0 && idx + 1 < same.length ? same[idx + 1].id : null;
+  }
+  function onDragEnd() {
+    dragId = null;
+    dropHint = null;
+  }
 </script>
 
-<div class="compact-shell">
-  <div class="compact-hd" data-tauri-drag-region>
-    <span class="hd-title" data-tauri-drag-region>◆ 吾道笔记</span>
-    <span class="hd-actions">
-      <button title={onTop ? "取消置顶" : "置顶"} class:on={onTop} onclick={toggleTop}>{onTop ? "★" : "☆"}</button>
-      <button title="展开完整窗口" onclick={expand}>□</button>
-      <button title="隐藏到托盘" onclick={() => void api.hideWindow()}>×</button>
-    </span>
-  </div>
-
-  <div class="compact-count">
-    {quickMode === "todo" ? `当前待办 · ${activeCount} 项` : "快速记笔记"}
-  </div>
-
-  {#if quickMode === "todo"}
-    <div class="compact-list">
-      {#each active as t (t.id)}
-        <div class="compact-row">
-          <button
-            class="tick"
-            title="标记完成"
-            onclick={() => void setTodoDone(t.id, true)}
-          ></button>
-          <span class="flex1" title={t.next_action || t.title}>{t.title}</span>
-          <span class="pr-badge {t.priority === 1 ? 'high' : t.priority === 2 ? 'mid' : 'low'}">
-            {t.priority === 1 ? "高" : t.priority === 2 ? "中" : "低"}
-          </span>
-        </div>
-      {:else}
-        <div class="compact-empty">没有未完成的待办</div>
-      {/each}
+<div class="compact-wrap">
+  <div class="compact-shell">
+    <div class="compact-hd" data-tauri-drag-region>
+      <span class="hd-title" data-tauri-drag-region>
+        <span class="hd-logo"><FeatherIcon size={13} color="#fff" /></span>吾道笔记
+      </span>
+      <span class="hd-actions">
+        <button title={onTop ? "取消置顶" : "置顶"} aria-label={onTop ? "取消置顶" : "置顶"} class:on={onTop} onclick={toggleTop}>
+          {onTop ? "★" : "☆"}
+        </button>
+        <button title="切换为胶囊悬浮" aria-label="切换为胶囊悬浮" onclick={toCapsule}>◉</button>
+        <button title="展开完整窗口" aria-label="展开完整窗口" onclick={expandFull}>□</button>
+        <button title="隐藏到托盘" aria-label="隐藏到托盘" onclick={() => void api.hideWindow()}>×</button>
+      </span>
     </div>
-  {:else}
-    <div class="compact-note-hint">输入内容将保存为笔记标题，展开后可补充正文与资料。</div>
-  {/if}
 
-  <div class="compact-foot">
-    <button
-      class="mode-toggle"
-      title={quickMode === "todo" ? "切换为快速记笔记" : "切换为快速新增待办"}
-      onclick={() => (quickMode = quickMode === "todo" ? "note" : "todo")}
-    >
-      {quickMode === "todo" ? "✎" : "☑"}
-    </button>
-    <input
-      bind:value={quickText}
-      placeholder={quickMode === "todo" ? "快速新增待办…" : "快速记笔记…"}
-      onkeydown={(e) => e.key === "Enter" && void quickAdd()}
-      spellcheck="false"
-    />
-    <button class="add-btn" title="添加" onclick={() => void quickAdd()}>＋</button>
+    <div class="compact-count">
+      {quickMode === "todo" ? `当前待办 · ${activeCount} 项` : "快速记笔记"}
+    </div>
+
+    {#if quickMode === "todo"}
+      <div class="compact-list">
+        {#each active as t (t.id)}
+          <div
+            class="compact-row"
+            class:dragging={dragId === t.id}
+            class:drop-above={dropHint?.id === t.id && dropHint.where === "above"}
+            class:drop-below={dropHint?.id === t.id && dropHint.where === "below"}
+            draggable="true"
+            ondragstart={(e) => onDragStart(e, t)}
+            ondragover={(e) => onDragOver(e, t)}
+            ondragleave={onDragLeave}
+            ondrop={(e) => onDrop(e, t)}
+            ondragend={onDragEnd}
+          >
+            <button class="tick" title="标记完成" aria-label="标记完成" onclick={() => void setTodoDone(t.id, true)}></button>
+            <span class="flex1" title={t.next_action || t.title}>{t.title}</span>
+            <span class="pr-badge {t.priority === 1 ? 'high' : t.priority === 2 ? 'mid' : 'low'}">
+              {t.priority === 1 ? "高" : t.priority === 2 ? "中" : "低"}
+            </span>
+          </div>
+        {:else}
+          <div class="compact-empty">没有未完成的待办</div>
+        {/each}
+        {#if active.length > 0}
+          <div class="compact-hint">按住行可拖动排序，跨优先级拖动会改变优先级</div>
+        {/if}
+      </div>
+    {:else}
+      <div class="compact-note-hint">输入内容将保存为笔记标题，展开后可补充正文与资料。</div>
+    {/if}
+
+    <div class="compact-foot">
+      <button
+        class="mode-toggle"
+        title={quickMode === "todo" ? "切换为快速记笔记" : "切换为快速新增待办"}
+        onclick={() => (quickMode = quickMode === "todo" ? "note" : "todo")}
+      >
+        {quickMode === "todo" ? "✎" : "☑"}
+      </button>
+      <input
+        bind:value={quickText}
+        placeholder={quickMode === "todo" ? "快速新增待办…" : "快速记笔记…"}
+        onkeydown={(e) => e.key === "Enter" && void quickAdd()}
+        spellcheck="false"
+      />
+      <button class="add-btn" title="添加" onclick={() => void quickAdd()}>＋</button>
+    </div>
+
+    <button class="expand-full" onclick={expandFull}>展开完整窗口 →</button>
   </div>
-
-  <button class="expand-full" onclick={expand}>查看更多 → 展开完整窗口</button>
 </div>
 
 <style>
   :global(html),
   :global(body) {
-    background: #fff;
+    background: transparent;
+  }
+  .compact-wrap {
+    height: 100vh;
+    padding: 7px;
+    background: transparent;
   }
   .compact-shell {
-    height: 100vh;
+    height: 100%;
     display: flex;
     flex-direction: column;
     background: #fff;
+    border: 1px solid #e5ebf5;
+    border-radius: 12px;
+    box-shadow: 0 14px 44px rgba(36, 53, 85, 0.22);
     overflow: hidden;
   }
   .compact-hd {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 13px 14px 12px;
+    padding: 11px 12px 10px 14px;
     border-bottom: 1px solid #eff2f7;
     font-size: 13px;
     font-weight: 700;
     flex: none;
   }
   .hd-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
     color: #293447;
+  }
+  .hd-logo {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    background: linear-gradient(150deg, #5883ff, #3a58d4);
   }
   .hd-actions {
     display: flex;
@@ -164,25 +249,36 @@
     color: var(--primary);
   }
   .compact-count {
-    padding: 13px 17px 6px;
+    padding: 11px 15px 5px;
     font-weight: 750;
-    font-size: 16px;
+    font-size: 15px;
     flex: none;
   }
   .compact-list {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 0 12px 8px;
+    padding: 0 10px 6px;
   }
   .compact-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 11px 5px;
+    padding: 10px 5px;
     border-bottom: 1px solid #f1f3f7;
     font-size: 12px;
     color: #4a576a;
+    cursor: grab;
+    border-radius: 6px;
+  }
+  .compact-row.dragging {
+    opacity: 0.45;
+  }
+  .compact-row.drop-above {
+    box-shadow: 0 -2px 0 0 var(--primary);
+  }
+  .compact-row.drop-below {
+    box-shadow: 0 2px 0 0 var(--primary);
   }
   .compact-row .flex1 {
     flex: 1;
@@ -194,8 +290,14 @@
   .compact-empty {
     color: #9ba8bd;
     text-align: center;
-    padding: 32px 0;
+    padding: 30px 0;
     font-size: 12px;
+  }
+  .compact-hint {
+    color: #b4bfce;
+    font-size: 10px;
+    text-align: center;
+    padding: 8px 0 4px;
   }
   .compact-note-hint {
     flex: 1;
@@ -206,7 +308,7 @@
   }
   .compact-foot {
     flex: none;
-    padding: 12px 14px;
+    padding: 10px 12px;
     background: #fafbfe;
     border-top: 1px solid #eff2f7;
     display: flex;
@@ -256,7 +358,7 @@
     background: transparent;
     color: #8a97a9;
     font-size: 11px;
-    padding: 8px 0 10px;
+    padding: 7px 0 9px;
   }
   .expand-full:hover {
     color: var(--primary);

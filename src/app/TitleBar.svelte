@@ -50,12 +50,16 @@
     {/if}
   </div>
   <div class="wincontrols">
-    <button title="切换到迷你悬浮模式" onclick={() => void api.setCompactMode(true)}>▣</button>
-    <button title="最小化" onclick={() => void api.minimizeWindow()}>−</button>
-    <button title={maximized ? "还原" : "最大化"} onclick={() => void api.toggleMaximizeWindow()}>
+    <button title="切换到简洁模式（胶囊悬浮）" aria-label="切换到简洁模式" onclick={() => void api.setWindowMode("compact")}>▣</button>
+    <button title="最小化" aria-label="最小化窗口" onclick={() => void api.minimizeWindow()}>−</button>
+    <button
+      title={maximized ? "还原" : "最大化"}
+      aria-label={maximized ? "还原窗口" : "最大化窗口"}
+      onclick={() => void api.toggleMaximizeWindow()}
+    >
       {maximized ? "❐" : "□"}
     </button>
-    <button class="close" title="隐藏到托盘" onclick={() => void api.hideWindow()}>×</button>
+    <button class="close" title="隐藏到托盘" aria-label="隐藏到托盘" onclick={() => void api.hideWindow()}>×</button>
   </div>
 </header>
 

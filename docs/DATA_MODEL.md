@@ -39,7 +39,9 @@
 ### settings
 
 键值表；允许写入的键有白名单（`services/settings.rs::ALLOWED_KEYS`）：
-`window_mode`、`normal_geometry`、`compact_geometry`、`compact_on_top`、`global_shortcut`、`launch_at_login`。
+`window_mode`（normal/compact/capsule 三种形态）、`normal_geometry`、`compact_geometry`、
+`capsule_geometry`、`capsule_docked`（胶囊收起侧：left/right/空）、`compact_on_top`（简洁/胶囊置顶）、
+`global_shortcut`、`launch_at_login`。
 
 ## 排序语义
 

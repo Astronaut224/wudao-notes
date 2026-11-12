@@ -33,7 +33,8 @@ body {
   font-family: Inter, "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif;
   font-size: 13px;
   color: var(--text);
-  background: var(--surface);
+  /* 窗口透明（胶囊/简洁窗圆角+阴影需要），完整模式由 .app-shell 铺白底 */
+  background: transparent;
   user-select: none;
 }
 
@@ -80,6 +81,8 @@ select:focus-visible {
 .app-shell {
   height: 100vh;
   display: flex;
+  background: var(--surface);
+  border: 1px solid #e0e6f0;
 }
 
 .sidebar {
