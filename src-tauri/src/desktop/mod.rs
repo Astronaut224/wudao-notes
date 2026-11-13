@@ -71,12 +71,15 @@ fn get_setting(conn: &rusqlite::Connection, key: &str) -> Option<String> {
     services::settings::get(conn, key)
 }
 
-/// 从几何串 "x,y,w,h" 中取 y（恢复收起条位置用）
-fn get_geometry_y(app: &AppHandle, key: &str) -> Option<i32> {
+/// 从几何串 "x,y,w,h" 中取 (x, y)
+fn get_geometry_xy(app: &AppHandle, key: &str) -> Option<(i32, i32)> {
     let state = app.state::<AppState>();
     let conn = state.db.lock().ok()?;
     let g = get_setting(&conn, key)?;
-    g.split(',').nth(1)?.parse::<i32>().ok()
+    let mut it = g.split(',');
+    let x = it.next()?.parse::<i32>().ok()?;
+    let y = it.next()?.parse::<i32>().ok()?;
+    Some((x, y))
 }
 
 /// 几何串 "x,y,w,h"（物理像素）
@@ -86,6 +89,23 @@ fn save_geometry(app: &AppHandle, mode: &str) {
     };
     if window.is_maximized().unwrap_or(false) || window.is_minimized().unwrap_or(false) {
         return;
+    }
+    if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
+        // 最小化窗口的特征坐标（-32000），不能存为几何
+        if pos.x <= -30000 || pos.y <= -30000 {
+            return;
+        }
+        let _ = size;
+    }
+    // 收起细条的矩形不能存为胶囊几何，否则下次切换到胶囊会被还原成细条（“找不到胶囊”）
+    if mode == MODE_CAPSULE {
+        let docked = app
+            .try_state::<ModeMirror>()
+            .map(|m| m.docked())
+            .unwrap_or_default();
+        if !docked.is_empty() {
+            return;
+        }
     }
     if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
         let g = format!("{},{},{},{}", pos.x, pos.y, size.width, size.height);
@@ -107,6 +127,21 @@ fn apply_geometry(window: &WebviewWindow, geom: &str, default_size: (f64, f64)) 
             if w > 0 && h > 0 {
                 let _ = window.set_position(PhysicalPosition::new(x, y));
                 let _ = window.set_size(PhysicalSize::new(w.max(40), h.max(40)));
+                // 防止历史几何把窗口恢复到屏幕外（显示器变更/记录污染）
+                if let (Ok(pos), Some(m)) = (
+                    window.outer_position(),
+                    window.current_monitor().ok().flatten(),
+                ) {
+                    let mp = m.position();
+                    let ms = m.size();
+                    let cw = window.outer_size().map(|s| s.width as i32).unwrap_or(w as i32);
+                    let ch = window.outer_size().map(|s| s.height as i32).unwrap_or(h as i32);
+                    let cx = pos.x.clamp(mp.x, (mp.x + ms.width as i32 - cw).max(mp.x));
+                    let cy = pos.y.clamp(mp.y, (mp.y + ms.height as i32 - ch).max(mp.y));
+                    if cx != pos.x || cy != pos.y {
+                        let _ = window.set_position(PhysicalPosition::new(cx, cy));
+                    }
+                }
                 return;
             }
         }
@@ -162,6 +197,10 @@ pub fn set_window_mode(app: &AppHandle, mode: &str) -> Result<(), String> {
         save_geometry(app, &old_mode);
     }
 
+    // 最小化状态下做几何操作会得到 -32000 等无效坐标，先还原
+    let _ = window.unminimize();
+    let _ = window.show();
+
     let _ = window.set_min_size(min_size(mode));
     let _ = window.unmaximize();
 
@@ -171,20 +210,42 @@ pub fn set_window_mode(app: &AppHandle, mode: &str) -> Result<(), String> {
         let d = mirror.docked();
         d == "left" || d == "right"
     };
-    if capsule_docked_restore {
+    if mode == MODE_CAPSULE {
+        // 胶囊几何恢复：位置沿用旧记录并钳制在当前屏内；尺寸始终为标准胶囊/细条，
+        // 防止历史脏数据（如收起条矩形）把胶囊还原成看不见的小窗
         let scale = window.scale_factor().unwrap_or(1.0);
+        let cap_w = (CAPSULE_SIZE.0 * scale) as i32;
+        let cap_h = (CAPSULE_SIZE.1 * scale) as i32;
         let dock_w = (CAPSULE_DOCK_SIZE.0 * scale) as i32;
         let dock_h = (CAPSULE_DOCK_SIZE.1 * scale) as i32;
-        let side = app.state::<ModeMirror>().docked();
-        let y = get_geometry_y(app, geometry_key(MODE_CAPSULE)).unwrap_or(200);
-        let (mx, _my, mw, _mh) = screen_bounds(&window);
-        let x = if side == "left" {
-            mx
+        let (mx, my, mw, mh) = screen_bounds(&window);
+        let saved = get_geometry_xy(app, geometry_key(MODE_CAPSULE));
+        if capsule_docked_restore {
+            let side = app.state::<ModeMirror>().docked();
+            let y = saved
+                .map(|(_, sy)| sy)
+                .unwrap_or_else(|| my + (mh / 3))
+                .clamp(my, (my + mh - dock_h).max(my));
+            let x = if side == "left" {
+                mx
+            } else {
+                (mx + mw - dock_w).max(mx)
+            };
+            let _ = window.set_size(PhysicalSize::new(dock_w.max(20), dock_h.max(20)));
+            let _ = window.set_position(PhysicalPosition::new(x, y));
         } else {
-            (mx + mw - dock_w).max(mx)
-        };
-        let _ = window.set_size(PhysicalSize::new(dock_w.max(20), dock_h.max(20)));
-        let _ = window.set_position(PhysicalPosition::new(x, y));
+            let _ = window.set_size(PhysicalSize::new(cap_w.max(40), cap_h.max(40)));
+            match saved {
+                Some((sx, sy)) => {
+                    let x = sx.clamp(mx, (mx + mw - cap_w).max(mx));
+                    let y = sy.clamp(my, (my + mh - cap_h).max(my));
+                    let _ = window.set_position(PhysicalPosition::new(x, y));
+                }
+                None => {
+                    place_capsule_default(&window);
+                }
+            }
+        }
     } else {
         let geom = {
             let state = app.state::<AppState>();
@@ -195,13 +256,7 @@ pub fn set_window_mode(app: &AppHandle, mode: &str) -> Result<(), String> {
             Some(g) => apply_geometry(&window, &g, default_size(mode)),
             None => {
                 let _ = window.set_size(LogicalSize::new(default_size(mode).0, default_size(mode).1));
-                match mode {
-                    // 胶囊默认出现在屏幕右缘、垂直居中偏上，便于发现
-                    MODE_CAPSULE => place_capsule_default(&window),
-                    _ => {
-                        let _ = window.center();
-                    }
-                }
+                let _ = window.center();
             }
         }
     }
@@ -217,8 +272,12 @@ pub fn set_window_mode(app: &AppHandle, mode: &str) -> Result<(), String> {
     };
     let _ = window.set_always_on_top(on_top);
 
-    // 胶囊形态：从其他形态切入时清除收起状态（进入时为展开态）
+    // 胶囊形态：从其他形态切入时清除收起状态（进入时为展开态）；
+    // 离开胶囊形态时同样清除，避免下次进入直接变成细条而非胶囊
     if mode == MODE_CAPSULE && old_mode != MODE_CAPSULE {
+        set_docked(app, "");
+    }
+    if old_mode == MODE_CAPSULE && mode != MODE_CAPSULE {
         set_docked(app, "");
     }
 
@@ -236,6 +295,7 @@ pub fn set_window_mode(app: &AppHandle, mode: &str) -> Result<(), String> {
         }
     }
     save_geometry(app, mode);
+    let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
     let _ = app.emit(
@@ -274,6 +334,7 @@ pub fn set_capsule_docked(app: &AppHandle, docked: bool, side: Option<String>) -
     let Some(window) = app.get_webview_window("main") else {
         return Err("主窗口不存在".into());
     };
+    let _ = window.unminimize();
     {
         let mirror = app.state::<ModeMirror>();
         let mut busy = mirror.busy.lock().map_err(|_| "内部状态异常".to_string())?;

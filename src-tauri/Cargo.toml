@@ -1,6 +1,6 @@
 [package]
 name = "wudao-notes"
-version = "1.1.2"
+version = "1.1.3"
 description = "吾道笔记 - 随时能打开的短期待办清单、关联资料与轻量笔记本"
 authors = ["wudao-notes"]
 edition = "2021"
