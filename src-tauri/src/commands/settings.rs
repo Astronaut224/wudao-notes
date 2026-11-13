@@ -10,7 +10,7 @@ use crate::{
 };
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> BizResult<HashMap<String, String>> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::settings::get_all(&conn).map_err(|e| BizError::new("db", e))
 }
 
@@ -29,18 +29,18 @@ pub fn update_setting(app: AppHandle, state: State<'_, AppState>, key: String, v
             };
             desktop::register_shortcut(&app, &accel)
                 .map_err(|e| BizError::new("shortcut_conflict", e))?;
-            let conn = state.db.lock().map_err(services::lock_error)?;
+            let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
             services::settings::set(&conn, "global_shortcut", &accel)
         }
         "compact_on_top" => {
-            let conn = state.db.lock().map_err(services::lock_error)?;
+            let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
             services::settings::set(&conn, "compact_on_top", &value)?;
             drop(conn);
             crate::commands::desktop::apply_saved_always_on_top(app);
             Ok(())
         }
         _ => {
-            let conn = state.db.lock().map_err(services::lock_error)?;
+            let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
             services::settings::set(&conn, &key, &value)
         }
     }
@@ -85,7 +85,7 @@ pub async fn export_backup(app: AppHandle, state: State<'_, AppState>) -> BizRes
     let db = state.db.clone();
     let dest = destination.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let conn = db.lock().map_err(services::lock_error)?;
+        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
         backup::export(&conn, &attachments_root, &dest)
     })
     .await
@@ -136,7 +136,7 @@ pub async fn execute_restore(
     let db = state.db.clone();
     let archive = std::path::PathBuf::from(path);
     let (todos, notes) = tauri::async_runtime::spawn_blocking(move || {
-        let conn = db.lock().map_err(services::lock_error)?;
+        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
         backup::restore(&conn, &attachments_root, &archive)
     })
     .await

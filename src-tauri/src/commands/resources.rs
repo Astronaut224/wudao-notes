@@ -80,7 +80,7 @@ pub fn attach_local_file(
     mode: String,
 ) -> BizResult<Resource> {
     let root = attachments_root(&app)?;
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::resources::attach_local_file(
         &conn,
         &root,
@@ -101,7 +101,7 @@ pub fn attach_url(
     url: String,
 ) -> BizResult<Resource> {
     let root = attachments_root(&app)?;
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::resources::attach_url(&conn, &root, &owner_type, &owner_id, &display_name, &url)
 }
 
@@ -113,7 +113,7 @@ pub fn list_resources(
     owner_id: String,
 ) -> BizResult<Vec<Resource>> {
     let root = attachments_root(&app)?;
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::resources::list(&conn, &root, &owner_type, &owner_id)
 }
 
@@ -127,7 +127,7 @@ pub fn open_resource(
 ) -> BizResult<()> {
     let root = attachments_root(&app)?;
     let res = {
-        let conn = state.db.lock().map_err(services::lock_error)?;
+        let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
         services::resources::get(&conn, &root, &id)?
     };
     match res.kind.as_str() {
@@ -162,7 +162,7 @@ pub fn remove_resource(
     id: String,
 ) -> BizResult<()> {
     let root = attachments_root(&app)?;
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::resources::remove(&conn, &root, &id)
 }
 
@@ -174,6 +174,6 @@ pub fn relocate_resource(
     new_path: String,
 ) -> BizResult<Resource> {
     let root = attachments_root(&app)?;
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::resources::relocate(&conn, &root, &id, std::path::Path::new(&new_path))
 }

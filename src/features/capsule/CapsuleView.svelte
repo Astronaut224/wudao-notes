@@ -8,7 +8,7 @@
   import { onMount } from "svelte";
   import FeatherIcon from "../../components/FeatherIcon.svelte";
   import { api } from "../../lib/api";
-  import { appState } from "../../stores/app.svelte";
+  import { appState, switchMode } from "../../stores/app.svelte";
   import { loadTodos, todoStore } from "../../stores/todos.svelte";
   import { toastError } from "../../stores/toast.svelte";
 
@@ -189,7 +189,7 @@
 
   async function openFull() {
     try {
-      await api.setWindowMode("normal");
+      await switchMode("normal");
     } catch (e) {
       toastError(e, "打开完整窗口失败");
     }
@@ -197,7 +197,7 @@
 
   async function openCompact() {
     try {
-      await api.setWindowMode("compact");
+      await switchMode("compact");
     } catch (e) {
       toastError(e, "打开简洁窗失败");
     }
@@ -263,9 +263,6 @@
     padding: 8px 8px 8px 12px;
     background: linear-gradient(150deg, #5883ff, #3a58d4);
     border-radius: 999px;
-    box-shadow:
-      0 10px 28px rgba(42, 64, 145, 0.38),
-      0 2px 6px rgba(42, 64, 145, 0.22);
     cursor: grab;
     user-select: none;
   }
@@ -318,7 +315,6 @@
     border: 0;
     border-radius: 6px;
     background: linear-gradient(180deg, #5883ff, #3a58d4);
-    box-shadow: 0 4px 14px rgba(42, 64, 145, 0.4);
     cursor: pointer;
     padding: 0;
   }

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { api } from "../lib/api";
-  import { appState } from "../stores/app.svelte";
+  import { appState, switchMode } from "../stores/app.svelte";
 
   let maximized = $state(false);
   let searchInput: HTMLInputElement | undefined = $state();
@@ -50,8 +50,8 @@
     {/if}
   </div>
   <div class="wincontrols">
-    <button title="切换到简洁模式" aria-label="切换到简洁模式" onclick={() => void api.setWindowMode("compact")}>▣</button>
-    <button title="切换为胶囊悬浮" aria-label="切换为胶囊悬浮" onclick={() => void api.setWindowMode("capsule")}>◉</button>
+    <button title="切换到简洁模式" aria-label="切换到简洁模式" onclick={() => void switchMode("compact")}>▣</button>
+    <button title="切换为胶囊悬浮" aria-label="切换为胶囊悬浮" onclick={() => void switchMode("capsule")}>◉</button>
     <button title="最小化" aria-label="最小化窗口" onclick={() => void api.minimizeWindow()}>−</button>
     <button
       title={maximized ? "还原" : "最大化"}

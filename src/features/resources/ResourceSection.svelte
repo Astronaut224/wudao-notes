@@ -65,7 +65,7 @@
   // Tauri 原生拖放：系统文件拖入窗口 → 复制/引用到当前详情
   // 资料区可见时，拖放的文件都归属当前选中的待办/笔记
   onMount(() => {
-    const un = getCurrentWebview().onDragDropEvent(async (event) => {
+    const unPromise = getCurrentWebview().onDragDropEvent(async (event) => {
       const payload = event.payload;
       if (payload.type === "enter" || payload.type === "over") {
         draggingFile = true;
@@ -93,7 +93,9 @@
         await reload();
       }
     });
-    return () => un();
+    return () => {
+      void unPromise.then((f) => f());
+    };
   });
 
   async function openRes(r: Resource) {

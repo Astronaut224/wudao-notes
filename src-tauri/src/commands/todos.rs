@@ -6,13 +6,13 @@ use crate::services::todos::{Todo, TodoFilter, TodoSummary};
 
 #[tauri::command]
 pub fn list_todos(state: State<'_, AppState>, filter: TodoFilter) -> BizResult<Vec<TodoSummary>> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::todos::list(&conn, &filter)
 }
 
 #[tauri::command]
 pub fn get_todo(state: State<'_, AppState>, id: String) -> BizResult<Todo> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::todos::get(&conn, &id)
 }
 
@@ -25,7 +25,7 @@ pub fn create_todo(
     description: Option<String>,
     due_date: Option<String>,
 ) -> BizResult<Todo> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::todos::create(
         &conn,
         &title,
@@ -38,13 +38,13 @@ pub fn create_todo(
 
 #[tauri::command]
 pub fn update_todo(state: State<'_, AppState>, id: String, patch: TodoPatch) -> BizResult<Todo> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::todos::update(&conn, &id, &patch)
 }
 
 #[tauri::command]
 pub fn set_todo_done(state: State<'_, AppState>, id: String, done: bool) -> BizResult<Todo> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::todos::set_done(&conn, &id, done)
 }
 
@@ -55,13 +55,13 @@ pub fn reorder_todo(
     new_priority: i64,
     before_id: Option<String>,
 ) -> BizResult<Todo> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::todos::reorder(&conn, &id, new_priority, before_id)
 }
 
 #[tauri::command]
 pub fn duplicate_todo(state: State<'_, AppState>, id: String) -> BizResult<Todo> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::todos::duplicate(&conn, &id)
 }
 
@@ -81,7 +81,7 @@ pub fn delete_todo(
         .join("attachments");
 
     let (managed, detached) = {
-        let conn = state.db.lock().map_err(services::lock_error)?;
+        let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
         services::with_tx(&conn, |conn| services::todos::delete(conn, &id))?
     };
     // 事务已提交，尽力清理托管文件

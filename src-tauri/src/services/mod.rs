@@ -34,11 +34,6 @@ pub fn with_tx<T>(
     }
 }
 
-/// Mutex 锁失败 → 业务错误
-pub fn lock_error<T>(_: T) -> BizError {
-    BizError::new("db", "数据库连接被占用，请稍后重试")
-}
-
 /// io / tauri 等各类 Display 错误 → 业务错误
 pub fn map_io<E: std::fmt::Display>(e: E) -> BizError {
     BizError::new("io", format!("文件操作失败: {e}"))

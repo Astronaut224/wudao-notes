@@ -1,6 +1,6 @@
 [package]
 name = "wudao-notes"
-version = "1.1.0"
+version = "1.1.2"
 description = "吾道笔记 - 随时能打开的短期待办清单、关联资料与轻量笔记本"
 authors = ["wudao-notes"]
 edition = "2021"
@@ -26,6 +26,7 @@ rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
+windows-sys = { version = "0.59", features = ["Win32_Graphics_Dwm", "Win32_Foundation"] }
 
 [dev-dependencies]
 tempfile = "3"

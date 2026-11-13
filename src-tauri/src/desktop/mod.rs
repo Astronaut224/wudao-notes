@@ -227,7 +227,7 @@ pub fn set_window_mode(app: &AppHandle, mode: &str) -> Result<(), String> {
         let conn = state
             .db
             .lock()
-            .map_err(|_| "数据库被占用".to_string())?;
+            .unwrap_or_else(|e| e.into_inner());
         services::settings::set(&conn, "window_mode", mode).map_err(|e| e.message)?;
     }
     if let Some(mirror) = app.try_state::<ModeMirror>() {
@@ -407,6 +407,25 @@ pub fn handle_global_shortcut(
     }
 }
 
+/// 移除 Windows 对无边框窗口自动绘制的系统描边（用户反馈的“外层边框”）。
+/// DWMWA_BORDER_COLOR = 34；DWMWA_COLOR_NONE = 0xFFFFFFFE 表示无边框。
+#[cfg(windows)]
+fn remove_system_border(window: &WebviewWindow) {
+    use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_BORDER_COLOR};
+    const DWMWA_COLOR_NONE: u32 = 0xFFFF_FFFE;
+    if let Ok(hwnd) = window.hwnd() {
+        let none: u32 = DWMWA_COLOR_NONE;
+        unsafe {
+            let _ = DwmSetWindowAttribute(
+                hwnd.0 as *mut core::ffi::c_void,
+                DWMWA_BORDER_COLOR as u32,
+                &none as *const u32 as *const core::ffi::c_void,
+                4,
+            );
+        }
+    }
+}
+
 pub fn setup(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
 
@@ -415,11 +434,12 @@ pub fn setup(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let window = app.get_webview_window("main").ok_or("主窗口不存在")?;
+    remove_system_border(&window);
 
     // 读取持久化形态并恢复几何
     let (saved_mode, saved_docked) = {
         let state = handle.state::<AppState>();
-        let conn = state.db.lock().map_err(|_| "数据库连接被占用")?;
+        let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
         (
             get_setting(&conn, "window_mode").unwrap_or_else(|| MODE_NORMAL.into()),
             get_setting(&conn, "capsule_docked").unwrap_or_default(),
@@ -438,7 +458,7 @@ pub fn setup(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     {
         let state = handle.state::<AppState>();
         // 不能直接 `?`：PoisonError 内含 MutexGuard，转 Box<dyn Error> 会把对局部值的引用提前返回
-        let conn = state.db.lock().map_err(|_| "数据库连接被占用")?;
+        let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
         if start_mode == MODE_NORMAL {
             if let Some(g) = get_setting(&conn, "normal_geometry") {
                 apply_geometry(&window, &g, NORMAL_SIZE);
@@ -502,7 +522,7 @@ pub fn setup(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // 全局快捷键
     let accel = {
         let state = handle.state::<AppState>();
-        let conn = state.db.lock().map_err(|_| "数据库连接被占用")?;
+        let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
         get_setting(&conn, "global_shortcut").unwrap_or_else(|| DEFAULT_SHORTCUT.into())
     };
     if let Err(e) = register_shortcut(&handle, &accel) {

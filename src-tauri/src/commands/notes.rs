@@ -11,7 +11,7 @@ pub fn list_notes(
     category: Option<String>,
     include_archived: Option<bool>,
 ) -> BizResult<Vec<NoteSummary>> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::notes::list(
         &conn,
         query,
@@ -22,7 +22,7 @@ pub fn list_notes(
 
 #[tauri::command]
 pub fn get_note(state: State<'_, AppState>, id: String) -> BizResult<Note> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::notes::get(&conn, &id)
 }
 
@@ -34,7 +34,7 @@ pub fn create_note(
     category: Option<String>,
     todo_id: Option<String>,
 ) -> BizResult<Note> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::notes::create(
         &conn,
         title,
@@ -46,7 +46,7 @@ pub fn create_note(
 
 #[tauri::command]
 pub fn update_note(state: State<'_, AppState>, id: String, patch: NotePatch) -> BizResult<Note> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::notes::update(&conn, &id, &patch)
 }
 
@@ -63,7 +63,7 @@ pub fn delete_note(
         .map_err(services::map_io)?
         .join("attachments");
     let managed = {
-        let conn = state.db.lock().map_err(services::lock_error)?;
+        let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
         services::with_tx(&conn, |conn| services::notes::delete(conn, &id))?
     };
     services::resources::cleanup_owner_dir(
@@ -76,6 +76,6 @@ pub fn delete_note(
 
 #[tauri::command]
 pub fn list_note_categories(state: State<'_, AppState>) -> BizResult<Vec<String>> {
-    let conn = state.db.lock().map_err(services::lock_error)?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     services::notes::list_categories(&conn)
 }

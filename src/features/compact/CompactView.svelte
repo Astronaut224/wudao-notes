@@ -6,7 +6,7 @@
   import { onMount } from "svelte";
   import FeatherIcon from "../../components/FeatherIcon.svelte";
   import { api } from "../../lib/api";
-  import { appState } from "../../stores/app.svelte";
+  import { appState, switchMode } from "../../stores/app.svelte";
   import { loadTodos, moveTodo, selectTodo, setTodoDone, todoStore } from "../../stores/todos.svelte";
   import { createNote } from "../../stores/notes.svelte";
   import { toast, toastError } from "../../stores/toast.svelte";
@@ -57,10 +57,10 @@
   }
 
   function expandFull() {
-    void api.setWindowMode("normal");
+    void switchMode("normal");
   }
   function toCapsule() {
-    void api.setWindowMode("capsule");
+    void switchMode("capsule");
   }
 
   function toggleTop() {
@@ -132,7 +132,7 @@
     appState.tab = "todo";
     await selectTodo(id);
     try {
-      await api.setWindowMode("normal");
+      await switchMode("normal");
     } catch (e) {
       toastError(e, "打开完整窗口失败");
     }
@@ -236,7 +236,6 @@
     background: #fff;
     border: 1px solid #e5ebf5;
     border-radius: 12px;
-    box-shadow: 0 14px 44px rgba(36, 53, 85, 0.22);
     overflow: hidden;
   }
   .compact-hd {

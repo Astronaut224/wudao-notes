@@ -5194,7 +5194,7 @@ dependencies = [
 
 [[package]]
 name = "wudao-notes"
-version = "1.1.0"
+version = "1.1.2"
 dependencies = [
  "chrono",
  "rusqlite",
@@ -5209,6 +5209,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tempfile",
  "uuid",
+ "windows-sys 0.59.0",
  "zip",
 ]
 
