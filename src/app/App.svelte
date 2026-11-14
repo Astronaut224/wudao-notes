@@ -14,7 +14,7 @@
   import CapsuleView from "../features/capsule/CapsuleView.svelte";
   import { api } from "../lib/api";
   import { appState } from "../stores/app.svelte";
-  import { loadTodos } from "../stores/todos.svelte";
+  import { loadMiniTodos, loadTodos } from "../stores/todos.svelte";
   import { createNote, loadNotes } from "../stores/notes.svelte";
   import { toast } from "../stores/toast.svelte";
 
@@ -63,6 +63,13 @@
       unlisteners.forEach((u) => u());
       unlisteners = [];
     };
+  });
+
+  // 进入简洁/胶囊形态时刷新迷你视图数据源（不受完整窗口筛选影响）
+  $effect(() => {
+    if (appState.mode === "compact" || appState.mode === "capsule") {
+      void loadMiniTodos();
+    }
   });
 
   // 搜索词变化：防抖刷新当前页列表

@@ -19,8 +19,19 @@ export const todoStore = $state({
   detailNotes: [] as NoteSummary[],
   /** 已完成视图的多选删除：选中的待办 id */
   selectedDone: [] as string[],
+  /** 简洁窗/胶囊专用：全部未完成待办（与完整窗口的筛选无关） */
+  miniItems: [] as TodoSummary[],
   listVersion: 0,
 });
+
+/** 迷你视图数据源：始终为全部未完成待办 */
+export async function loadMiniTodos() {
+  try {
+    todoStore.miniItems = await api.listTodos("active", "");
+  } catch (e) {
+    toastError(e, "加载待办失败");
+  }
+}
 
 export function toggleDoneSelection(id: string) {
   const idx = todoStore.selectedDone.indexOf(id);
@@ -56,6 +67,12 @@ async function selectTodoSilent(id: string | null) {
 export async function loadTodos() {
   try {
     todoStore.items = await api.listTodos(scopeOf(todoStore.filter), appState.searchQuery);
+    // 迷你视图始终显示全部未完成，与完整窗口的筛选/搜索无关
+    if (todoStore.filter !== "all" || appState.searchQuery) {
+      todoStore.miniItems = await api.listTodos("active", "");
+    } else {
+      todoStore.miniItems = todoStore.items.filter((t) => t.status === "active");
+    }
   } catch (e) {
     toastError(e, "加载待办失败");
   }

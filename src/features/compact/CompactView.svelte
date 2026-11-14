@@ -7,7 +7,7 @@
   import FeatherIcon from "../../components/FeatherIcon.svelte";
   import { api } from "../../lib/api";
   import { appState, switchMode } from "../../stores/app.svelte";
-  import { loadTodos, moveTodo, selectTodo, setTodoDone, todoStore } from "../../stores/todos.svelte";
+  import { loadMiniTodos, moveTodo, selectTodo, setTodoDone, todoStore } from "../../stores/todos.svelte";
   import { createNote } from "../../stores/notes.svelte";
   import { toast, toastError } from "../../stores/toast.svelte";
   import type { TodoSummary } from "../../lib/types";
@@ -17,15 +17,15 @@
   let onTop = $state(false);
 
   const active = $derived(
-    todoStore.items
-      .filter((t) => t.status === "active")
+    todoStore.miniItems
+      .slice()
       .sort((a, b) => a.priority - b.priority || a.sort_order - b.sort_order)
       .slice(0, 10),
   );
-  const activeCount = $derived(todoStore.items.filter((t) => t.status === "active").length);
+  const activeCount = $derived(todoStore.miniItems.length);
 
   onMount(() => {
-    void loadTodos();
+    void loadMiniTodos();
     void api
       .getSettings()
       .then((s) => {
@@ -113,7 +113,7 @@
       dragId = null;
       if (!dragMoved || !hint || !id) return;
       suppressClick = true;
-      const target = todoStore.items.find((x) => x.id === hint.id);
+      const target = todoStore.miniItems.find((x) => x.id === hint.id);
       if (!target) return;
       const beforeId = hint.where === "above" ? target.id : nextSiblingOf(target);
       void moveTodo(id, target.priority, beforeId);
@@ -122,7 +122,7 @@
     window.addEventListener("pointerup", up);
   }
   function nextSiblingOf(t: TodoSummary): string | null {
-    const same = todoStore.items
+    const same = todoStore.miniItems
       .filter((x) => x.status === "active" && x.priority === t.priority)
       .sort((a, b) => a.sort_order - b.sort_order);
     const idx = same.findIndex((x) => x.id === t.id);

@@ -9,7 +9,7 @@
   import FeatherIcon from "../../components/FeatherIcon.svelte";
   import { api } from "../../lib/api";
   import { appState, switchMode } from "../../stores/app.svelte";
-  import { loadTodos, todoStore } from "../../stores/todos.svelte";
+  import { loadMiniTodos, todoStore } from "../../stores/todos.svelte";
   import { toastError } from "../../stores/toast.svelte";
 
   /** 边缘吸附阈值（物理像素） */
@@ -29,11 +29,11 @@
   let lastClickAt = 0;
   let singleClickTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const activeCount = $derived(todoStore.items.filter((t) => t.status === "active").length);
+  const activeCount = $derived(todoStore.miniItems.length);
   const docked = $derived(appState.capsuleDocked !== "");
 
   onMount(() => {
-    void loadTodos();
+    void loadMiniTodos();
     return () => {
       if (redockTimer) clearTimeout(redockTimer);
       if (singleClickTimer) clearTimeout(singleClickTimer);
