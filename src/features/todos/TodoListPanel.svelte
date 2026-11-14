@@ -2,7 +2,9 @@
   import ContextMenu, { type CtxItem } from "../../components/ContextMenu.svelte";
   import ConfirmDialog from "../../components/ConfirmDialog.svelte";
   import { appState } from "../../stores/app.svelte";
+  import { toast, toastError } from "../../stores/toast.svelte";
   import {
+    clearCompletedTodos,
     deleteTodo,
     duplicateTodo,
     moveTodo,
@@ -109,6 +111,21 @@
   // ---------- 右键菜单 ----------
   let ctx = $state<{ x: number; y: number; todo: TodoSummary } | null>(null);
   let confirmDelete = $state<TodoSummary | null>(null);
+  let confirmClearCompleted = $state(false);
+
+  async function doClearCompleted() {
+    confirmClearCompleted = false;
+    try {
+      const r = await clearCompletedTodos();
+      toast(
+        r.deleted > 0
+          ? `已永久删除 ${r.deleted} 条已完成待办${r.detached_notes > 0 ? `，${r.detached_notes} 条关联笔记已解除关联并保留` : ""}`
+          : "没有已完成的待办",
+      );
+    } catch (e) {
+      toastError(e, "清空失败");
+    }
+  }
 
   function ctxItems(t: TodoSummary): CtxItem[] {
     const done = t.status === "done";
@@ -192,6 +209,11 @@
       <div class="group-title">
         <span class="group-dot {g.priority === 2 ? 'mid' : g.priority === 3 ? 'low' : ''}"></span>
         {g.priority === 0 ? `已完成 · ${g.items.length}` : g.title}
+        {#if g.priority === 0 && g.items.length > 0}
+          <button class="clear-completed" onclick={() => (confirmClearCompleted = true)}>
+            🗑 永久删除全部
+          </button>
+        {/if}
       </div>
       {#each g.items as t (t.id)}
         <div
@@ -281,7 +303,32 @@
   onCancel={() => (confirmDelete = null)}
 />
 
+<ConfirmDialog
+  open={confirmClearCompleted}
+  title="永久删除已完成待办"
+  message={`将永久删除全部 ${todoStore.items.filter((t) => t.status === "done").length} 条已完成待办及其关联资料（应用内副本），关联笔记将解除关联并保留。
+
+此操作不可恢复，确定继续吗？`}
+  confirmText="永久删除"
+  danger
+  onConfirm={() => void doClearCompleted()}
+  onCancel={() => (confirmClearCompleted = false)}
+/>
+
 <style>
+  .clear-completed {
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    color: var(--danger);
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 5px;
+    letter-spacing: normal;
+  }
+  .clear-completed:hover {
+    background: #fdecea;
+  }
   .todo-row {
     border: 1px solid transparent;
     border-radius: 10px;

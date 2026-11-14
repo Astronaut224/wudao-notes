@@ -66,11 +66,12 @@ fn escape_like(q: &str) -> String {
     out
 }
 
+/// archived: "unarchived"（默认，只看未归档）| "archived"（只看已归档）| "all"
 pub fn list(
     conn: &Connection,
     query: Option<String>,
     category: Option<String>,
-    include_archived: bool,
+    archived: Option<String>,
 ) -> BizResult<Vec<NoteSummary>> {
     let mut sql = String::from(
         "SELECT n.*, \
@@ -80,8 +81,10 @@ pub fn list(
     );
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
-    if !include_archived {
-        sql.push_str(" AND n.is_archived = 0");
+    match archived.as_deref() {
+        Some("archived") => sql.push_str(" AND n.is_archived = 1"),
+        Some("all") => {}
+        _ => sql.push_str(" AND n.is_archived = 0"),
     }
     if let Some(cat) = category.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
         sql.push_str(" AND n.category = ?");
@@ -238,6 +241,30 @@ pub fn delete(conn: &Connection, id: &str) -> BizResult<Vec<String>> {
     Ok(managed)
 }
 
+/// 永久删除全部已归档笔记。返回 (删除条数, 笔记 id 列表, 随删托管附件相对路径)
+pub fn clear_archived(conn: &Connection) -> BizResult<(usize, Vec<String>, Vec<String>)> {
+    let ids: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT id FROM notes WHERE is_archived = 1")
+            .map_err(|e| BizError::new("db", e.to_string()))?;
+        let rows = stmt
+            .query_map([], |r| r.get(0))
+            .map_err(|e| BizError::new("db", e.to_string()))?;
+        let mut v = Vec::new();
+        for r in rows {
+            v.push(r.map_err(|e| BizError::new("db", e.to_string()))?);
+        }
+        v
+    };
+    let mut managed: Vec<String> = Vec::new();
+    for id in &ids {
+        if let Ok(paths) = delete(conn, id) {
+            managed.extend(paths);
+        }
+    }
+    Ok((ids.len(), ids, managed))
+}
+
 pub fn list_categories(conn: &Connection) -> BizResult<Vec<String>> {
     let mut stmt = conn
         .prepare(
@@ -266,4 +293,61 @@ fn ensure_todo_exists(conn: &Connection, todo_id: &str) -> BizResult<()> {
         return Err(BizError::new("not_found", "关联的待办不存在"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::migrations::V1_SCHEMA;
+
+    #[test]
+    fn clear_archived_only_removes_archived() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(V1_SCHEMA).unwrap();
+        let now = "2026-01-01 00:00:00";
+        conn.execute(
+            "INSERT INTO notes (id, title, body, is_archived, created_at, updated_at) VALUES ('na','归档','',1,?1,?1)",
+            [now],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO notes (id, title, body, is_archived, created_at, updated_at) VALUES ('nu','未归档','',0,?1,?1)",
+            [now],
+        )
+        .unwrap();
+        let (deleted, ids, _) = clear_archived(&conn).unwrap();
+        assert_eq!(deleted, 1);
+        assert_eq!(ids, vec!["na".to_string()]);
+        let left: i64 = conn
+            .query_row("SELECT COUNT(*) FROM notes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(left, 1);
+    }
+
+    #[test]
+    fn list_archived_filter_semantics() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(V1_SCHEMA).unwrap();
+        let now = "2026-01-01 00:00:00";
+        conn.execute(
+            "INSERT INTO notes (id, title, body, is_archived, created_at, updated_at) VALUES ('na','归档','',1,?1,?1)",
+            [now],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO notes (id, title, body, is_archived, created_at, updated_at) VALUES ('nu','未归档','',0,?1,?1)",
+            [now],
+        )
+        .unwrap();
+        // 默认（未归档）
+        assert_eq!(list(&conn, None, None, Some("unarchived".into())).unwrap().len(), 1);
+        // 仅归档
+        let arch = list(&conn, None, None, Some("archived".into())).unwrap();
+        assert_eq!(arch.len(), 1);
+        assert_eq!(arch[0].note.id, "na");
+        // 全部
+        assert_eq!(list(&conn, None, None, Some("all".into())).unwrap().len(), 2);
+        // None 与 unarchived 等价
+        assert_eq!(list(&conn, None, None, None).unwrap().len(), 1);
+    }
 }

@@ -45,11 +45,12 @@ export const api = {
   },
 
   // ---------- Note ----------
-  listNotes(query: string, category: string, includeArchived: boolean): Promise<NoteSummary[]> {
+  /** archived: "unarchived" | "archived" | "all" */
+  listNotes(query: string, category: string, archived: string): Promise<NoteSummary[]> {
     return invoke("list_notes", {
       query: query || null,
       category: category || null,
-      includeArchived,
+      archived,
     });
   },
   getNote(id: string): Promise<Note> {
@@ -68,6 +69,16 @@ export const api = {
   },
   deleteNote(id: string): Promise<{ managed_removed: number }> {
     return invoke("delete_note", { id });
+  },
+  clearArchivedNotes(): Promise<{ deleted: number }> {
+    return invoke("clear_archived_notes");
+  },
+  clearCompletedTodos(): Promise<{
+    deleted: number;
+    detached_notes: number;
+    managed_removed: number;
+  }> {
+    return invoke("clear_completed_todos");
   },
   listNoteCategories(): Promise<string[]> {
     return invoke("list_note_categories");

@@ -157,6 +157,20 @@ export async function duplicateTodo(id: string) {
   }
 }
 
+/** 永久删除全部已完成待办（调用前需确认） */
+export async function clearCompletedTodos(): Promise<{
+  deleted: number;
+  detached_notes: number;
+}> {
+  const r = await api.clearCompletedTodos();
+  if (todoStore.selectedId) {
+    const sel = todoStore.items.find((t) => t.id === todoStore.selectedId);
+    if (sel && sel.status === "done") await selectTodo(null);
+  }
+  await loadTodos();
+  return { deleted: r.deleted, detached_notes: r.detached_notes };
+}
+
 export async function deleteTodo(id: string) {
   try {
     const r = await api.deleteTodo(id);

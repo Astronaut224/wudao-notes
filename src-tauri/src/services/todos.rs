@@ -370,6 +370,31 @@ pub fn delete(conn: &Connection, id: &str) -> BizResult<(Vec<String>, i64)> {
     Ok((managed, detached_notes))
 }
 
+/// 永久删除全部已完成待办。返回 (删除条数, 解除关联并保留的笔记数, 随删托管附件数)
+pub fn clear_completed(conn: &Connection) -> BizResult<(usize, i64, usize)> {
+    let ids: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT id FROM todo_items WHERE status = 'done'")
+            .map_err(|e| BizError::new("db", e.to_string()))?;
+        let rows = stmt
+            .query_map([], |r| r.get(0))
+            .map_err(|e| BizError::new("db", e.to_string()))?;
+        let mut v = Vec::new();
+        for r in rows {
+            v.push(r.map_err(|e| BizError::new("db", e.to_string()))?);
+        }
+        v
+    };
+    let mut detached_total: i64 = 0;
+    let mut managed_total: usize = 0;
+    for id in &ids {
+        let (managed, detached) = delete(conn, id)?;
+        detached_total += detached;
+        managed_total += managed.len();
+    }
+    Ok((ids.len(), detached_total, managed_total))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,6 +564,29 @@ mod tests {
             .unwrap();
         assert_eq!(title, "纪要");
         assert!(todo_id.is_none());
+    }
+
+    #[test]
+    fn clear_completed_only_removes_done() {
+        let conn = test_conn();
+        let done = create(&conn, "已完成", 1, "", "", None).unwrap();
+        set_done(&conn, &done.id, true).unwrap();
+        let active = create(&conn, "进行中", 2, "", "", None).unwrap();
+        let now = "2026-01-01 00:00:00";
+        conn.execute(
+            "INSERT INTO notes (id, title, body, todo_id, created_at, updated_at) VALUES ('n9','纪要','', ?1, ?2, ?2)",
+            rusqlite::params![done.id, now],
+        )
+        .unwrap();
+        let (deleted, detached, _managed) = clear_completed(&conn).unwrap();
+        assert_eq!(deleted, 1);
+        assert_eq!(detached, 1);
+        assert!(get(&conn, &done.id).is_err());
+        assert!(get(&conn, &active.id).is_ok());
+        let note_todo: Option<String> = conn
+            .query_row("SELECT todo_id FROM notes WHERE id='n9'", [], |r| r.get(0))
+            .unwrap();
+        assert!(note_todo.is_none());
     }
 
     #[test]

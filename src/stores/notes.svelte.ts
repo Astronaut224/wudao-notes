@@ -20,7 +20,7 @@ export async function loadNotes() {
     noteStore.items = await api.listNotes(
       appState.searchQuery,
       noteStore.categoryFilter,
-      noteStore.showArchived,
+      noteStore.showArchived ? "archived" : "unarchived",
     );
     noteStore.categories = await api.listNoteCategories();
   } catch (e) {
@@ -104,6 +104,14 @@ export async function patchNote(id: string, patch: Parameters<typeof api.updateN
     toast(`保存失败，内容已保留：${typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e)}`, "error");
     return null;
   }
+}
+
+/** 永久删除全部已归档笔记（调用前需确认） */
+export async function clearArchivedNotes(): Promise<number> {
+  const r = await api.clearArchivedNotes();
+  await selectNote(null);
+  await loadNotes();
+  return r.deleted;
 }
 
 export async function deleteNote(id: string) {

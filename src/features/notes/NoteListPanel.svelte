@@ -1,6 +1,9 @@
 <script lang="ts">
+  import ConfirmDialog from "../../components/ConfirmDialog.svelte";
+  import { toast, toastError } from "../../stores/toast.svelte";
   import { appState } from "../../stores/app.svelte";
   import {
+    clearArchivedNotes,
     createNote,
     noteStore,
     selectNote,
@@ -26,6 +29,17 @@
   }
 
   let creating = $state(false);
+  let confirmClearArchived = $state(false);
+
+  async function doClearArchived() {
+    confirmClearArchived = false;
+    try {
+      const n = await clearArchivedNotes();
+      toast(n > 0 ? `已永久删除 ${n} 篇已归档笔记` : "没有已归档笔记");
+    } catch (e) {
+      toastError(e, "清空失败");
+    }
+  }
 </script>
 
 <section class="panel-list">
@@ -53,6 +67,12 @@
       已归档
     </button>
   </div>
+
+  {#if noteStore.showArchived && noteStore.items.length > 0}
+    <button class="clear-archived" onclick={() => (confirmClearArchived = true)}>
+      🗑 永久删除全部已归档笔记（{noteStore.items.length} 篇）
+    </button>
+  {/if}
 
   {#each noteStore.items as n (n.id)}
     <div
@@ -92,7 +112,34 @@
   {/if}
 </section>
 
+<ConfirmDialog
+  open={confirmClearArchived}
+  title="永久删除已归档笔记"
+  message={`将永久删除全部 ${noteStore.items.length} 篇已归档笔记及其关联资料（应用内副本），不可恢复。
+
+确定继续吗？`}
+  confirmText="永久删除"
+  danger
+  onConfirm={() => void doClearArchived()}
+  onCancel={() => (confirmClearArchived = false)}
+/>
+
 <style>
+  .clear-archived {
+    display: block;
+    width: 100%;
+    margin: 10px 0 4px;
+    padding: 8px 10px;
+    border: 1px solid #f3d9d7;
+    background: #fff7f6;
+    color: var(--danger);
+    border-radius: 8px;
+    font-size: 11px;
+    text-align: center;
+  }
+  .clear-archived:hover {
+    background: #fdecea;
+  }
   .note-item {
     border: 1px solid transparent;
     padding: 14px 13px;
