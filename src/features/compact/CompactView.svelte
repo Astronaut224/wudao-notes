@@ -83,6 +83,8 @@
 
   function onRowPointerDown(e: PointerEvent, t: TodoSummary) {
     if (e.button !== 0) return;
+    // 勾选框等交互子控件不作为拖拽起点，否则 setPointerCapture 会吞掉其 click 事件
+    if ((e.target as HTMLElement).closest("button, input, a, select, textarea")) return;
     dragId = t.id;
     dragMoved = false;
     dragStart = { x: e.clientX, y: e.clientY };
@@ -181,7 +183,15 @@
             }}
             onkeydown={(e) => e.key === "Enter" && void openDetailInFull(t.id)}
           >
-            <button class="tick" title="标记完成" aria-label="标记完成" onclick={() => void setTodoDone(t.id, true)}></button>
+            <button
+              class="tick"
+              title="标记完成"
+              aria-label="标记完成"
+              onclick={(e) => {
+                e.stopPropagation();
+                void setTodoDone(t.id, true);
+              }}
+            ></button>
             <span class="flex1" title={t.next_action || t.title}>{t.title}</span>
             <span class="pr-badge {t.priority === 1 ? 'high' : t.priority === 2 ? 'mid' : 'low'}">
               {t.priority === 1 ? "高" : t.priority === 2 ? "中" : "低"}

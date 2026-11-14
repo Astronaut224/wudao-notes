@@ -60,6 +60,8 @@
 
   function onRowPointerDown(e: PointerEvent, t: TodoSummary) {
     if (e.button !== 0 || t.status !== "active") return;
+    // 勾选框等交互子控件不作为拖拽起点，否则 setPointerCapture 会吞掉其 click 事件
+    if ((e.target as HTMLElement).closest("button, input, a, select, textarea")) return;
     dragId = t.id;
     dragMoved = false;
     dragStart = { x: e.clientX, y: e.clientY };
