@@ -4,14 +4,16 @@
   import { appState } from "../../stores/app.svelte";
   import { toast, toastError } from "../../stores/toast.svelte";
   import {
-    clearCompletedTodos,
+    deleteSelectedDone,
     deleteTodo,
     duplicateTodo,
     moveTodo,
+    setAllDoneSelection,
     setFilter,
     setTodoDone,
     selectTodo,
     todoStore,
+    toggleDoneSelection,
   } from "../../stores/todos.svelte";
   import type { Priority, TodoSummary } from "../../lib/types";
   import { dueLabel } from "../../lib/utils";
@@ -111,19 +113,23 @@
   // ---------- 右键菜单 ----------
   let ctx = $state<{ x: number; y: number; todo: TodoSummary } | null>(null);
   let confirmDelete = $state<TodoSummary | null>(null);
-  let confirmClearCompleted = $state(false);
+  let confirmClearSelected = $state(false);
 
-  async function doClearCompleted() {
-    confirmClearCompleted = false;
+  const doneCount = $derived(todoStore.items.filter((t) => t.status === "done").length);
+  const selectedCount = $derived(todoStore.selectedDone.length);
+  const allDoneSelected = $derived(doneCount > 0 && selectedCount === doneCount);
+
+  async function doClearSelected() {
+    confirmClearSelected = false;
     try {
-      const r = await clearCompletedTodos();
+      const r = await deleteSelectedDone();
       toast(
         r.deleted > 0
-          ? `已永久删除 ${r.deleted} 条已完成待办${r.detached_notes > 0 ? `，${r.detached_notes} 条关联笔记已解除关联并保留` : ""}`
-          : "没有已完成的待办",
+          ? `已永久删除 ${r.deleted} 条待办${r.detached_notes > 0 ? `，${r.detached_notes} 条关联笔记已解除关联并保留` : ""}`
+          : "未选中任何待办",
       );
     } catch (e) {
-      toastError(e, "清空失败");
+      toastError(e, "删除失败");
     }
   }
 
@@ -210,8 +216,18 @@
         <span class="group-dot {g.priority === 2 ? 'mid' : g.priority === 3 ? 'low' : ''}"></span>
         {g.priority === 0 ? `已完成 · ${g.items.length}` : g.title}
         {#if g.priority === 0 && g.items.length > 0}
-          <button class="clear-completed" onclick={() => (confirmClearCompleted = true)}>
-            🗑 永久删除全部
+          <button
+            class="clear-completed"
+            onclick={() => setAllDoneSelection(!allDoneSelected)}
+          >
+            {allDoneSelected ? "清除选择" : "全选"}
+          </button>
+          <button
+            class="clear-completed"
+            disabled={selectedCount === 0}
+            onclick={() => (confirmClearSelected = true)}
+          >
+            🗑 删除所选（{selectedCount}）
           </button>
         {/if}
       </div>
@@ -251,6 +267,16 @@
           >
             {t.status === "done" ? "✓" : ""}
           </button>
+          {#if t.status === "done"}
+            <input
+              type="checkbox"
+              class="sel-box"
+              title="选择以永久删除"
+              checked={todoStore.selectedDone.includes(t.id)}
+              onclick={(e) => e.stopPropagation()}
+              onchange={() => toggleDoneSelection(t.id)}
+            />
+          {/if}
           <div class="todo-main">
             <div class="todo-name" class:done={t.status === "done"}>{t.title}</div>
             {#if t.next_action}
@@ -304,18 +330,30 @@
 />
 
 <ConfirmDialog
-  open={confirmClearCompleted}
-  title="永久删除已完成待办"
-  message={`将永久删除全部 ${todoStore.items.filter((t) => t.status === "done").length} 条已完成待办及其关联资料（应用内副本），关联笔记将解除关联并保留。
+  open={confirmClearSelected}
+  title="永久删除所选待办"
+  message={`将永久删除所选的 ${selectedCount} 条待办及其关联资料（应用内副本），关联笔记将解除关联并保留。
 
 此操作不可恢复，确定继续吗？`}
   confirmText="永久删除"
   danger
-  onConfirm={() => void doClearCompleted()}
-  onCancel={() => (confirmClearCompleted = false)}
+  onConfirm={() => void doClearSelected()}
+  onCancel={() => (confirmClearSelected = false)}
 />
 
 <style>
+  .sel-box {
+    accent-color: var(--danger);
+    width: 15px;
+    height: 15px;
+    flex: none;
+    cursor: pointer;
+    margin-right: -3px;
+  }
+  .clear-completed:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
   .clear-completed {
     margin-left: auto;
     border: 0;

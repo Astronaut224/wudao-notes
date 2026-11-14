@@ -52,6 +52,7 @@ pub fn run() {
             commands::todos::reorder_todo,
             commands::todos::duplicate_todo,
             commands::todos::delete_todo,
+            commands::todos::delete_todos,
             commands::todos::clear_completed_todos,
             commands::notes::list_notes,
             commands::notes::create_note,

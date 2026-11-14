@@ -17,8 +17,41 @@ export const todoStore = $state({
   detail: null as Todo | null,
   detailResources: [] as Resource[],
   detailNotes: [] as NoteSummary[],
+  /** 已完成视图的多选删除：选中的待办 id */
+  selectedDone: [] as string[],
   listVersion: 0,
 });
+
+export function toggleDoneSelection(id: string) {
+  const idx = todoStore.selectedDone.indexOf(id);
+  if (idx >= 0) todoStore.selectedDone.splice(idx, 1);
+  else todoStore.selectedDone.push(id);
+}
+
+export function setAllDoneSelection(selected: boolean) {
+  todoStore.selectedDone = selected
+    ? todoStore.items.filter((t) => t.status === "done").map((t) => t.id)
+    : [];
+}
+
+export async function deleteSelectedDone(): Promise<{ deleted: number; detached_notes: number }> {
+  const ids = [...todoStore.selectedDone];
+  const r = await api.deleteTodos(ids);
+  todoStore.selectedDone = [];
+  if (todoStore.selectedId && ids.includes(todoStore.selectedId)) {
+    await selectTodoSilent(null);
+  }
+  await loadTodos();
+  return { deleted: r.deleted, detached_notes: r.detached_notes };
+}
+
+/** 静默清除选中详情（不触发加载） */
+async function selectTodoSilent(id: string | null) {
+  todoStore.selectedId = id;
+  todoStore.detail = null;
+  todoStore.detailResources = [];
+  todoStore.detailNotes = [];
+}
 
 export async function loadTodos() {
   try {
@@ -49,7 +82,7 @@ export async function refreshDetail(id: string) {
     const [detail, resources, allNotes] = await Promise.all([
       api.getTodo(id),
       api.listResources("todo", id),
-      api.listNotes("", "", true),
+      api.listNotes("", "", "all"),
     ]);
     // 条目可能刚被删除
     if (detail.id !== todoStore.selectedId) return;

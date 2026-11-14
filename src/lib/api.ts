@@ -43,6 +43,9 @@ export const api = {
   deleteTodo(id: string): Promise<{ managed_removed: number; detached_notes: number }> {
     return invoke("delete_todo", { id });
   },
+  deleteTodos(ids: string[]): Promise<{ deleted: number; detached_notes: number }> {
+    return invoke("delete_todos", { ids });
+  },
 
   // ---------- Note ----------
   /** archived: "unarchived" | "archived" | "all" */

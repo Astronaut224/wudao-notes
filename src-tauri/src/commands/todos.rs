@@ -65,6 +65,52 @@ pub fn duplicate_todo(state: State<'_, AppState>, id: String) -> BizResult<Todo>
     services::todos::duplicate(&conn, &id)
 }
 
+/// 批量删除待办（多选删除）：单事务删除，提交后清理托管附件目录。
+#[tauri::command]
+pub fn delete_todos(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    ids: Vec<String>,
+) -> BizResult<serde_json::Value> {
+    use tauri::Manager;
+    if ids.is_empty() {
+        return Ok(serde_json::json!({ "deleted": 0, "detached_notes": 0 }));
+    }
+    let attachments_root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(services::map_io)?
+        .join("attachments");
+
+    let (mut deleted, mut detached, mut managed, mut ok_ids) =
+        (0usize, 0i64, 0usize, Vec::new());
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
+    for id in &ids {
+        match services::with_tx(&conn, |conn| services::todos::delete(conn, id)) {
+            Ok((m, d)) => {
+                deleted += 1;
+                detached += d;
+                managed += m.len();
+                ok_ids.push(id.clone());
+            }
+            Err(_) => continue, // 单条失败不影响其余
+        }
+    }
+    drop(conn);
+    for id in &ok_ids {
+        services::resources::cleanup_owner_dir(
+            &services::resources::AttachmentRoot(attachments_root.clone()),
+            "todo",
+            id,
+        );
+    }
+    Ok(serde_json::json!({
+        "deleted": deleted,
+        "detached_notes": detached,
+        "managed_removed": managed,
+    }))
+}
+
 /// 删除待办：事务删除记录，提交后清理托管附件文件。
 /// 返回（已删除的托管附件数，解除关联并保留的笔记数），用于向用户反馈。
 /// 永久删除全部已完成待办（调用前前端需二次确认）。
